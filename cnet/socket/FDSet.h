@@ -5,11 +5,20 @@
 
 #include <jclib/iterator.h>
 
+#ifdef JCLIB_EXCEPTIONS
 #include <exception>
 #include <stdexcept>
+#endif
+
+#include <chrono>
+
+
 
 namespace ccap::net
 {
+	/**
+	 * @brief Minimal wrapper around fd_set giving it STL container semantics
+	*/
 	struct FDSet
 	{
 	public:
@@ -119,14 +128,14 @@ namespace ccap::net
 		{
 			if (this->size() >= this->capacity())
 			{
-				CCAP_EXIT();
+				JCLIB_ABORT();
 			};
 			this->resize(this->size() + 1);
 			this->back() = _sock;
 		};
-		constexpr void insert(value_type _sock) noexcept(!exceptions_v)
+		constexpr void insert(value_type _sock) noexcept(!JCLIB_EXCEPTIONS)
 		{
-			if constexpr (exceptions_v)
+			if constexpr (JCLIB_EXCEPTIONS)
 			{
 				if (this->size() >= this->capacity())
 				{
@@ -147,32 +156,78 @@ namespace ccap::net
 			this->resize(0);
 		};
 
+
+		fd_set& as_fdset() noexcept
+		{
+			return this->data_;
+		};
+		const fd_set& as_fdset() const noexcept
+		{
+			return this->data_;
+		};
+
+	private:
 		fd_set data_;
 	};
 
+
+
+
 	/**
-	 * @brief Same as socketlib builtin select but takes in the wrapepd FDSet type
-	 * @param _numFds Unused, just set to 0
-	 * @param _readSet Optional read set pointer
-	 * @param _writeSet Optional write set pointer
-	 * @param _exceptSet Optional except set pointer
-	 * @param _timeout Optional timeout value, if nullptr this will block until a set was selected
-	 * @return Number of sockets changed or error code (if return < 0)
+	 * @brief Converts a chrono duration into a timeval
+	 * @return Socket timeout value
 	*/
-	inline auto select(int _numFds, FDSet* _readSet, FDSet* _writeSet, FDSet* _exceptSet, ::timeval* _timeout)
+	constexpr inline ::timeval convert_timeval(std::chrono::microseconds _duration)
 	{
-		constexpr auto getif = [](FDSet* _set) -> ::fd_set*
+		const auto _seconds = std::chrono::duration_cast<std::chrono::seconds>(_duration);
+		const auto _microSeconds = _duration - std::chrono::duration_cast<std::chrono::microseconds>(_seconds);
+
+		::timeval _out{};
+
+		using timeval_duration = decltype(_out.tv_sec);
+		_out.tv_sec = static_cast<timeval_duration>(_seconds.count());
+		_out.tv_usec = static_cast<timeval_duration>(_microSeconds.count());
+
+		return _out;
+	};
+
+	/**
+	 * @brief Converts a chrono duration into a timeval
+	 * @return Socket timeout value
+	*/
+	template <typename Rep, typename Period>
+	constexpr inline ::timeval convert_timeval(std::chrono::duration<Rep, Period> _duration)
+	{
+		return convert_timeval(std::chrono::duration_cast<std::chrono::microseconds>(_duration));
+	};
+
+
+
+
+	namespace impl
+	{
+		constexpr auto get_if = [](auto _getfn, auto _empty)
 		{
-			if (_set)
+			return [_getfn, _empty](auto& v)
 			{
-				return &_set->data_;
-			}
-			else
-			{
-				return nullptr;
+				return (v && v->size() != 0)? _getfn(v) : _empty;
 			};
 		};
-		return ::select(_numFds, getif(_readSet), getif(_writeSet), getif(_exceptSet), _timeout);
+		constexpr auto get_fdset = impl::get_if([](FDSet* _fd) { return &_fd->as_fdset(); }, nullptr);
 	};
+
+
+
+	inline int select(int _flags, FDSet* _read, FDSet* _write, FDSet* _excepts, const ::timeval& _timeout)
+	{
+		auto& _get = impl::get_fdset;
+		return ::select(_flags, _get(_read), _get(_write), _get(_excepts), &_timeout);
+	};
+	inline int select(int _flags, FDSet* _read, FDSet* _write, FDSet* _excepts)
+	{
+		auto& _get = impl::get_fdset;
+		return ::select(_flags, _get(_read), _get(_write), _get(_excepts), nullptr);
+	};
+
 
 };

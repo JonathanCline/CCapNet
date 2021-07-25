@@ -38,9 +38,9 @@ namespace ccap::net
 	/**
 	 * @brief Attempts to connect to an address returned from getaddrinfo
 	 * @param _address Address list
-	 * @return The connected socket if succesful, otherwise invalid socket
+	 * @return The connected socket if succesfull, otherwise invalid socket
 	*/
-	socket_t connect(const AddrList& _address)
+	inline socket_t connect(const AddrList& _address)
 	{
 		socket_t _sock = nullsock;
 		for (auto& addr : _address)
@@ -73,11 +73,62 @@ namespace ccap::net
 	 * @param _service Service name, usually port number
 	 * @return The connected socket if succesful, otherwise invalid socket
 	*/
-	socket_t connect(const char* _address, const char* _service, ::addrinfo* _hints = nullptr)
+	inline socket_t connect(const char* _address, const char* _service, ::addrinfo* _hints = nullptr)
 	{
-		const auto _addrList = getaddrinfo(_address, _service, _hints);
+		const auto _addrList = (_hints)? getaddrinfo(_address, _service, *_hints) : getaddrinfo(_address, _service);
 		return connect(_addrList);
 	};
+
+
+
+
+	inline socket_t new_listener(const char* _address, const char* _service, int _backlog, ::addrinfo* _hints = nullptr)
+	{
+		socket_t _sock{};
+
+		auto _addrList = (_hints) ? getaddrinfo(_address, _service, *_hints) : getaddrinfo(_address, _service);
+		for (auto& v : _addrList)
+		{
+			_sock = ::socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+			if (_sock != net::nullsock)
+			{
+				const auto _error = ::bind(_sock, v.ai_addr, v.ai_addrlen);
+				if (_error == (int)net::ERR_NONE)
+				{
+					break;
+				};
+			};
+
+			const auto _closeError = ::closesocket(_sock);
+			if (_closeError != (int)net::ERR_NONE)
+			{
+				continue;
+			};
+		};
+
+		if (_sock != net::nullsock)
+		{
+			const auto _result = ::listen(_sock, _backlog);
+			if (_result == net::sockerr) [[unlikely]]
+			{
+				return nullsock;
+			};
+		};
+
+		return _sock;
+	};
+
+
+	inline void set_blocking(net::socket_t _sock, bool _blocking)
+	{
+		u_long _arg = (_blocking) ? 0 : 1;
+		auto _result = ::ioctlsocket(_sock, FIONBIO, &_arg);
+		if (_result == net::sockerr)
+		{
+			std::terminate();
+		};
+	};
+
 
 };
 

@@ -9,7 +9,7 @@ include("CMakeUtils.cmake")
 
 set(lib_dir "${CMAKE_CURRENT_SOURCE_DIR}/local")
 set(jclib_url "https://github.com/JonathanCline/JCLib")
-set(jclib_branch "main")
+set(jclib_branch "dev")
 
 add_library(${PROJECT_NAME} INTERFACE)
 target_include_directories(${PROJECT_NAME} INTERFACE ".")

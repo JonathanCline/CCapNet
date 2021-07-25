@@ -249,19 +249,26 @@ namespace ccap::net
 	};
 
 
-	inline AddrList getaddrinfo(const char* _name, const char* _service, ::addrinfo* _hints)
+	inline AddrList getaddrinfo(const char* _name, const char* _service, ::addrinfo& _hints)
 	{
 		addrinfo* _out{};
-		const auto _result = ::getaddrinfo(_name, _service, _hints, &_out);
+		const auto _result = ::getaddrinfo(_name, _service, &_hints, &_out);
 		if (_result != 0)
 		{
 			return AddrInfo{};
 		};
 		return AddrInfo{ _out };
 	};
+
 	inline AddrList getaddrinfo(const char* _name, const char* _service)
 	{
-		return getaddrinfo(_name, _service, nullptr);
+		addrinfo* _out{};
+		const auto _result = ::getaddrinfo(_name, _service, nullptr, &_out);
+		if (_result != 0)
+		{
+			return AddrInfo{};
+		};
+		return AddrInfo{ _out };
 	};
 
 
